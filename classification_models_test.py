@@ -3,6 +3,8 @@ from enum import Enum
 import csv
 from abc import ABC, abstractmethod
 import sys
+import numpy as np
+import matplotlib.pyplot as plt
 
 # Assume the given files are compiled by the ground truth (if the measured qubit is dark or bright)
 BRIGHT_QUBITS_MEASUREMENTS = [
@@ -72,7 +74,7 @@ def read_qubit_measurements():
             with open(measurement_filename, 'r') as measurement_file:
                 reader = csv.reader(measurement_file)
                 for photons in reader:
-                    qubit_measurements.append(QubitMeasurement(photons, ground_truth))
+                    qubit_measurements.append(QubitMeasurement([float(photon) for photon in photons], ground_truth))
         return qubit_measurements
 
     qubit_measurements = []
@@ -103,7 +105,7 @@ def gather_measurement_statistics(qubit_measurements):
     return reliability
 
 
-if __name__ == '__main__':
+def threshold_cutoff_experiments():
     options = get_arguments()
     qubit_measurements = read_qubit_measurements()
 
@@ -121,3 +123,41 @@ if __name__ == '__main__':
     print("Threshold Cutoff Model Accuracy:")
     for threshold, reliability in _accuracy_results:
         print("{},{}".format(threshold, reliability))
+
+
+def find_false_classifications_with_photon_histogram():
+    """
+    Classify qubits by the Threshold Cutoff Model with the optimal threshold, find all mis-classified qubits and
+    print the histogram of each's measured photons (frequency of every arriving time interval)
+    """
+    options= get_arguments()
+    qubit_measurements = read_qubit_measurements()
+    model = ThresholdCutoffModel(12)
+    classify_qubits(model, qubit_measurements)
+    reliability = gather_measurement_statistics(qubit_measurements)
+
+    misclassified_qubits = list(filter(
+        lambda measurement: measurement.ground_truth != measurement.classified_result, qubit_measurements))
+    false_positive_qubits = list(filter(
+        lambda measurement: measurement.ground_truth == Qubit.BRIGHT and measurement.classified_result == Qubit.DARK,
+        qubit_measurements))
+    false_negative_qubits = list(filter(
+        lambda measurement: measurement.ground_truth == Qubit.DARK and measurement.classified_result == Qubit.BRIGHT,
+        qubit_measurements))
+
+    measurement_photon_histograms = [np.histogram(qubit.photons) for qubit in misclassified_qubits]
+    print("One historgram of measured photons in a mis-classifed qubit: \n{}".format(measurement_photon_histograms[0]))
+
+    plt.figure(0, figsize=(9, 8))
+    plt.title("Histogram of False Positive Qubits")
+    for index in range(len(false_positive_qubits)):
+        plt.hist(false_positive_qubits[index].photons)
+    plt.figure(1, figsize=(9, 8))
+    plt.title("Histogram of False Negative Qubits")
+    for index in range(len(false_negative_qubits)):
+        plt.hist(false_negative_qubits[index].photons)
+    plt.show()
+
+
+if __name__ == '__main__':
+    find_false_classifications_with_photon_histogram()
