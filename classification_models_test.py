@@ -23,6 +23,7 @@ DARK_QUBITS_MEASUREMENTS = [
     'Data4Jens/DarkTimeTagSet5.csv',
 ]
 
+BEST_RELIABILITY_ACHIEVED = 0.9997081106493118
 
 class Qubit(Enum):
     BRIGHT = 0
@@ -56,6 +57,21 @@ class ThresholdCutoffModel(ClassificationModel):
 
     def classify(self, qubit_measurement):
         return Qubit.BRIGHT if len(qubit_measurement.photons) > self.threshold else Qubit.DARK
+
+
+class ThresholdCutoffEarlyArrivalModel(ClassificationModel):
+    def __init__(self, number_threshold, arrival_time_threshold):
+        super().__init__()
+        self.number_threshold = number_threshold
+        self.arrival_time_threshold = arrival_time_threshold
+
+    def __str__(self):
+        return "Threshold Cutoff Early Arrival Model w/ photon number threshold {} and arrival time threshold {}".format(
+            self.number_threshold, self.arrival_time_threshold)
+
+    def classify(self, qubit_measurement):
+        meaningful_photons = list(filter(lambda photon: photon < self.arrival_time_threshold, qubit_measurement.photons))
+        return Qubit.BRIGHT if len(meaningful_photons) > self.number_threshold else Qubit.DARK
 
 
 def get_arguments():
@@ -102,7 +118,7 @@ def gather_measurement_statistics(qubit_measurements):
 
     print("Datapoints: {}\nFalse Positives : {}\nFalse Negatives: {}\nReliability: {}".format(
         datapoints, false_positives, false_negatives, reliability))
-    return reliability
+    return reliability, false_positives, false_negatives
 
 
 def threshold_cutoff_experiments():
@@ -117,7 +133,7 @@ def threshold_cutoff_experiments():
     for threshold in range(0, _most_photons_received + 1):
         model = ThresholdCutoffModel(threshold)
         classify_qubits(model, qubit_measurements)
-        reliability = gather_measurement_statistics(qubit_measurements)
+        reliability, _, _ = gather_measurement_statistics(qubit_measurements)
         _accuracy_results.append((threshold, reliability))
     
     print("Threshold Cutoff Model Accuracy:")
@@ -134,7 +150,7 @@ def find_false_classifications_with_photon_histogram():
     qubit_measurements = read_qubit_measurements()
     model = ThresholdCutoffModel(12)
     classify_qubits(model, qubit_measurements)
-    reliability = gather_measurement_statistics(qubit_measurements)
+    reliability, _, _ = gather_measurement_statistics(qubit_measurements)
 
     misclassified_qubits = list(filter(
         lambda measurement: measurement.ground_truth != measurement.classified_result, qubit_measurements))
@@ -159,5 +175,34 @@ def find_false_classifications_with_photon_histogram():
     plt.show()
 
 
+def threshold_cutoff_early_arrival_experiments():
+    """
+    Per the idea in paper "Machine learning assisted readout of trapped-ion qubits",
+    try filter out late arrival photons in the Threshold Cutoff classification approach
+    """
+    with open('threshold_cutoff_early_arrival_experiment.csv', 'w') as result_file:
+        writer = csv.writer(result_file)
+
+        options= get_arguments()
+        qubit_measurements = read_qubit_measurements()
+        _most_photons_received = max(list(map(lambda measurement: len(measurement.photons), qubit_measurements)))
+        _latest_photon_arrival_time = max(list(map(
+            lambda measurement: max(measurement.photons) if len(measurement.photons) > 0 else 0, 
+            qubit_measurements)))
+        log("Latest photon arrival time among all measurements: {}".format(_latest_photon_arrival_time))
+
+        for arrival_time_threshold in np.arange(_latest_photon_arrival_time, 0, -0.0001):
+            for number_threshold in range(1, 41):  # thresholds that achieve reliability > 70% without early arrival model
+                model = ThresholdCutoffEarlyArrivalModel(number_threshold, arrival_time_threshold)
+                log("Testing {}".format(model))
+                classify_qubits(model, qubit_measurements)
+                reliability, false_positives, false_negatives = gather_measurement_statistics(qubit_measurements)
+
+                writer.writerow([arrival_time_threshold, number_threshold, reliability, false_positives, false_negatives])
+                result_file.flush()
+                if reliability > BEST_RELIABILITY_ACHIEVED:
+                    print("Higher Reliability Achieved! Reliability = {}, Model: {}".format(reliability, model))
+
+
 if __name__ == '__main__':
-    find_false_classifications_with_photon_histogram()
+    threshold_cutoff_early_arrival_experiments()
