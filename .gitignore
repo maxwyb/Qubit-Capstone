@@ -2,6 +2,8 @@
 .vscode
 .ipynb_checkpoints
 venv
+__pycache__
 
 Data4Jens
 Data4Jens.zip
+pickle_data

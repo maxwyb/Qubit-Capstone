@@ -1,0 +1,4 @@
+Higher Reliability Achieved! Reliability = 0.9997106937409107, Model: Threshold Cutoff Early Arrival Model w/ photon number threshold 12 and arrival time threshold 0.00519914
+Higher Reliability Achieved! Reliability = 0.9997106937409107, Model: Threshold Cutoff Early Arrival Model w/ photon number threshold 12 and arrival time threshold 0.005099139999999999
+Higher Reliability Achieved! Reliability = 0.9997106937409107, Model: Threshold Cutoff Early Arrival Model w/ photon number threshold 11 and arrival time threshold 0.004999139999999999
+Higher Reliability Achieved! Reliability = 0.9997106937409107, Model: Threshold Cutoff Early Arrival Model w/ photon number threshold 12 and arrival time threshold 0.004999139999999999
