@@ -180,6 +180,8 @@ def run_mlp():
     mlp_grid = picklize('mlp_grid_search_cv') \
         (mlp_grid_search_cv)(qubits_measurements_train, qubits_truths_train)
     log(pd.DataFrame(mlp_grid.cv_results_))
+    print("Best parameters found in Grid Search:")
+    print(mlp_grid.best_params_)
 
     classifier_test(mlp_grid, qubits_measurements_train, qubits_measurements_test, 
         qubits_truths_train, qubits_truths_test)
