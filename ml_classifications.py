@@ -38,7 +38,7 @@ def picklize(db_id, overwrite=False):
 
             db_filename = _pickle_db_path(db_id)
             if (not overwrite) and path.exists(db_filename):
-                log("Loading data from Pickle database {}".format(db_filename))
+                log("Pickle: Loading from database {}".format(db_filename))
                 with open(db_filename, 'rb') as db_file:
                     return pickle.load(db_file)
             else:
@@ -92,22 +92,23 @@ class Histogramize(BaseEstimator, TransformerMixin):
 
 # Classifiers
 def classifier_train(classifier, qubits_measurements_train, qubits_truths_train):
-    log("Starting Classifier training: {}".format(classifier))
+    log("Training Classifier: {}".format(classifier))
     classifier.fit(qubits_measurements_train, qubits_truths_train)
     return classifier
 
 
-def classifier_test(classifier, qubits_measurements_train, qubits_measurements_test, qubits_truths_train, qubits_truths_test):
+def classifier_test(classifier, qubits_measurements_train, qubits_measurements_test, 
+        qubits_truths_train, qubits_truths_test):
     log("Testing classifier: {}".format(classifier))
 
     qubits_predict_train = classifier.predict(qubits_measurements_train)
     qubits_predict_test = classifier.predict(qubits_measurements_test)
 
-    print("Classification Report on Train Data:")
+    print("Classification Report on Training Data:")
     print(confusion_matrix(qubits_truths_train, qubits_predict_train))
     print(classification_report(qubits_truths_train, qubits_predict_train, digits=8))
 
-    print("Classification Report on Test Data:")
+    print("Classification Report on Testing Data:")
     print(confusion_matrix(qubits_truths_test, qubits_predict_test))
     print(classification_report(qubits_truths_test, qubits_predict_test, digits=8))
 
@@ -117,18 +118,15 @@ def mlp_grid_search_cv(qubits_measurements_train, qubits_truths_train):
     log("Starting Grid Search with Cross Validation on MLP Classifier.")
     
     mlp_pipeline = Pipeline([
-        ('histogram', Histogramize()),
-        ('clf', MLPClassifier(activation='relu', solver='adam', learning_rate='constant'))
+        ('hstgm', Histogramize(num_buckets=6)),
+        ('clf', MLPClassifier(activation='relu', solver='adam'))
     ])
 
     mlp_param_grid = {
-        # 'hidden_layer_sizes': [(n, n) for n in range(8, 44, 4)],  # keep at 2 layers
-        # 'learning_rate_init': [0.001, 0.0005],
-        # 'max_iter': [200, 500]
-        'histogram__num_buckets': [6],
-        'clf__hidden_layer_sizes': [(8, 8)],
-        'clf__learning_rate_init': [0.001],
-        'clf__max_iter': [200]
+        # 'hstgm__num_buckets': range(2, 33),
+        'clf__hidden_layer_sizes': [(n, n) for n in range(8, 41)]
+        # 'clf__learning_rate_init': [0.001, 0.0005],
+        # 'clf__max_iter': [200, 500]
     }
 
     mlp_grid = GridSearchCV(mlp_pipeline, cv=4, n_jobs=-1, param_grid=mlp_param_grid, scoring="accuracy", verbose=2)
@@ -139,26 +137,20 @@ def mlp_grid_search_cv(qubits_measurements_train, qubits_truths_train):
 # Logistic Regression
 def logistic_regression_grid_search_cv(qubits_measurements_train, qubits_truths_train):
     log("Starting Grid Search with Cross Validation on Logistic Regression models.")
-    # _cache_dir = mkdtemp()
-    # _memory = Memory(cachedir=_cache_dir)
 
     lg_pipeline = Pipeline([
-        ('histogram', Histogramize(arrival_time_threshold=BEST_ARRIVAL_TIME_THRESHOLD, num_buckets=5)),
+        ('hstgm', Histogramize(arrival_time_threshold=BEST_ARRIVAL_TIME_THRESHOLD, num_buckets=6)),
         ('clf', LogisticRegression(solver='liblinear', random_state=42))
     ])
 
     lg_param_grid = {
         # 'histogram__num_buckets': range(2, 33),
-        # 'clf__penalty': ['none', 'l1', 'l2'],
-        # 'clf__C': [10**-3, 10**-2, 10**-1, 10**0, 10**1, 10**2, 10**3]
-        'histogram__num_buckets': [5],
-        'clf__penalty': ['l1'],
-        'clf__C': [10**1]
+        'clf__penalty': ['none', 'l1', 'l2'],
+        'clf__C': [10**-3, 10**-2, 10**-1, 10**0, 10**1, 10**2, 10**3]
     }
 
     lg_grid = GridSearchCV(lg_pipeline, cv=4, n_jobs=-1, param_grid=lg_param_grid, scoring="accuracy", refit=True, verbose=1)
     lg_grid.fit(qubits_measurements_train, qubits_truths_train)
-    # rmtree(_cache_dir)
     return lg_grid
 
 
@@ -185,7 +177,7 @@ def run_mlp():
     qubits_measurements_train, qubits_measurements_test, qubits_truths_train, qubits_truths_test = \
         train_test_split(qubits_measurements, qubits_truths, test_size=0.20, random_state=42)
         
-    mlp_grid = picklize('mlp_grid_search_cv', overwrite=True) \
+    mlp_grid = picklize('mlp_grid_search_cv') \
         (mlp_grid_search_cv)(qubits_measurements_train, qubits_truths_train)
     log(pd.DataFrame(mlp_grid.cv_results_))
 
@@ -207,6 +199,6 @@ def run_logistic_regression():
 
 
 if __name__ == '__main__':
-    run_mlp_classifier_in_paper()
-    # run_mlp()
+    # run_mlp_classifier_in_paper()
+    run_mlp()
     # run_logistic_regression()
