@@ -3,9 +3,12 @@ import numpy as np
 import csv
 import pickle
 from os import path
+from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.neural_network import MLPClassifier
 from sklearn.metrics import classification_report, confusion_matrix
+from sklearn.linear_model import LogisticRegression
+from sklearn.pipeline import Pipeline
 
 from classification_models_test import log
 
@@ -70,72 +73,140 @@ def load_datasets():
 
 
 # Data pre-processing
-ARRIVAL_TIME_THRESHOLD = 0.00529914
+BEST_ARRIVAL_TIME_THRESHOLD = 0.00529914
 
 
-def data_preprocessing(histogram_num_buckets=5):
-    log("Pre-processing measurement data into histograms with {} buckets.".format(histogram_num_buckets))
-    histogram_bins = np.linspace(0, ARRIVAL_TIME_THRESHOLD, num=(histogram_num_buckets + 1), endpoint=True)
-    qubits_measurements_histogram = list(map(
-        lambda measurement: np.histogram(measurement, bins=histogram_bins)[0], qubits_measurements))
-    return qubits_measurements_histogram
+class Histogramize(BaseEstimator, TransformerMixin):
+    def __init__(self, arrival_time_threshold=BEST_ARRIVAL_TIME_THRESHOLD, num_buckets=5):
+        self.arrival_time_threshold = arrival_time_threshold
+        self.num_buckets = num_buckets
+    
+    def fit(self, X, y=None):
+        return self
+
+    def transform(self, X, y=None):
+        histogram_bins = np.linspace(0, self.arrival_time_threshold, num=(self.num_buckets + 1), endpoint=True)
+        return list(map(
+            lambda measurement: np.histogram(measurement, bins=histogram_bins)[0], X))
 
 
-def data_train_test_split(qubits_measurements, qubits_truths):
-    return train_test_split(qubits_measurements, qubits_truths, test_size=0.20, random_state=42)
+# Classifiers
+def classifier_train(classifier, qubits_measurements_train, qubits_truths_train):
+    log("Starting Classifier training: {}".format(classifier))
+    classifier.fit(qubits_measurements_train, qubits_truths_train)
+    return classifier
 
 
-# MLP Classifier
-def mlp_classifier_train(qubits_measurements_train, qubits_truths_train):
-    mlp = MLPClassifier(hidden_layer_sizes=(8, 8), activation='relu', solver='adam')
-    log("Start MLP Classifier training.")
-    mlp.fit(qubits_measurements_train, qubits_truths_train)
-    return mlp
+def classifier_test(classifier, qubits_measurements_train, qubits_measurements_test, qubits_truths_train, qubits_truths_test):
+    log("Testing classifier: {}".format(classifier))
 
-
-def mlp_classifier_test(qubits_measurements_train, qubits_measurements_test, qubits_truths_train, qubits_truths_test):
-    qubits_predict_train = mlp.predict(qubits_measurements_train)
-    qubits_predict_test = mlp.predict(qubits_measurements_test)
+    qubits_predict_train = classifier.predict(qubits_measurements_train)
+    qubits_predict_test = classifier.predict(qubits_measurements_test)
 
     print("Classification Report on Train Data:")
     print(confusion_matrix(qubits_truths_train, qubits_predict_train))
-    print(classification_report(qubits_truths_train, qubits_predict_train))
+    print(classification_report(qubits_truths_train, qubits_predict_train, digits=8))
 
     print("Classification Report on Test Data:")
     print(confusion_matrix(qubits_truths_test, qubits_predict_test))
-    print(classification_report(qubits_truths_test, qubits_predict_test))
+    print(classification_report(qubits_truths_test, qubits_predict_test, digits=8))
 
 
-def mlp_grid_search_cross_validation(qubits_measurements_train, qubits_truths_train):
-    log("Starting Grid Search with Cross Validation on MLC Classifier.")
-
-    mlp = MLPClassifier(activation='relu', solver='adam', learning_rate='constant')
+# MLP Classifier
+def mlp_grid_search_cv(qubits_measurements_train, qubits_truths_train):
+    log("Starting Grid Search with Cross Validation on MLP Classifier.")
+    
+    mlp_pipeline = Pipeline([
+        ('histogram', Histogramize()),
+        ('clf', MLPClassifier(activation='relu', solver='adam', learning_rate='constant'))
+    ])
 
     mlp_param_grid = {
-        'hidden_layer_sizes': [(n, n) for n in range(8, 44, 4)],  # keep at 2 layers
-        'learning_rate_init': [0.001, 0.0005],
-        'max_iter': [200, 500]
+        # 'hidden_layer_sizes': [(n, n) for n in range(8, 44, 4)],  # keep at 2 layers
+        # 'learning_rate_init': [0.001, 0.0005],
+        # 'max_iter': [200, 500]
+        'histogram__num_buckets': [6],
+        'clf__hidden_layer_sizes': [(8, 8)],
+        'clf__learning_rate_init': [0.001],
+        'clf__max_iter': [200]
     }
 
-    mlp_grid = GridSearchCV(mlp, cv=4, n_jobs=-1, param_grid=mlp_param_grid, scoring="accuracy")
+    mlp_grid = GridSearchCV(mlp_pipeline, cv=4, n_jobs=-1, param_grid=mlp_param_grid, scoring="accuracy", verbose=2)
     mlp_grid.fit(qubits_measurements_train, qubits_truths_train)
+    return mlp_grid
 
-    return pd.DataFrame(mlp_grid.cv_results_).sort_values('mean_test_score', ascending=False)
+
+# Logistic Regression
+def logistic_regression_grid_search_cv(qubits_measurements_train, qubits_truths_train):
+    log("Starting Grid Search with Cross Validation on Logistic Regression models.")
+    # _cache_dir = mkdtemp()
+    # _memory = Memory(cachedir=_cache_dir)
+
+    lg_pipeline = Pipeline([
+        ('histogram', Histogramize(arrival_time_threshold=BEST_ARRIVAL_TIME_THRESHOLD, num_buckets=5)),
+        ('clf', LogisticRegression(solver='liblinear', random_state=42))
+    ])
+
+    lg_param_grid = {
+        # 'histogram__num_buckets': range(2, 33),
+        # 'clf__penalty': ['none', 'l1', 'l2'],
+        # 'clf__C': [10**-3, 10**-2, 10**-1, 10**0, 10**1, 10**2, 10**3]
+        'histogram__num_buckets': [5],
+        'clf__penalty': ['l1'],
+        'clf__C': [10**1]
+    }
+
+    lg_grid = GridSearchCV(lg_pipeline, cv=4, n_jobs=-1, param_grid=lg_param_grid, scoring="accuracy", refit=True, verbose=1)
+    lg_grid.fit(qubits_measurements_train, qubits_truths_train)
+    # rmtree(_cache_dir)
+    return lg_grid
+
+
+# Main Tasks
+def run_mlp_classifier_in_paper():
+    qubits_measurements, qubits_truths = load_datasets()
+    qubits_measurements_train, qubits_measurements_test, qubits_truths_train, qubits_truths_test = \
+        train_test_split(qubits_measurements, qubits_truths, test_size=0.20, random_state=42)
+
+    log("Histogramizing training and testing data.")
+    histogramizer = Histogramize(num_buckets=6)
+    qubits_measurements_train_histogram = histogramizer.transform(qubits_measurements_train)
+    qubits_measurements_test_histogram = histogramizer.transform(qubits_measurements_test)
+
+    mlp = picklize("mlp", overwrite=True)(classifier_train)(
+        MLPClassifier(hidden_layer_sizes=(8, 8), activation='relu', solver='adam'),  # 2-layer feed-forward neural network used in the paper
+        qubits_measurements_train_histogram, qubits_truths_train)
+    classifier_test(mlp, qubits_measurements_train_histogram, qubits_measurements_test_histogram, 
+        qubits_truths_train, qubits_truths_test)
+
+
+def run_mlp():
+    qubits_measurements, qubits_truths = load_datasets()
+    qubits_measurements_train, qubits_measurements_test, qubits_truths_train, qubits_truths_test = \
+        train_test_split(qubits_measurements, qubits_truths, test_size=0.20, random_state=42)
+        
+    mlp_grid = picklize('mlp_grid_search_cv', overwrite=True) \
+        (mlp_grid_search_cv)(qubits_measurements_train, qubits_truths_train)
+    log(pd.DataFrame(mlp_grid.cv_results_))
+
+    classifier_test(mlp_grid, qubits_measurements_train, qubits_measurements_test, 
+        qubits_truths_train, qubits_truths_test)
+
+
+def run_logistic_regression():
+    qubits_measurements, qubits_truths = load_datasets()
+    qubits_measurements_train, qubits_measurements_test, qubits_truths_train, qubits_truths_test = \
+        train_test_split(qubits_measurements, qubits_truths, test_size=0.20, random_state=42)
+
+    lg_grid = picklize('logistic_regression_grid_search_cv') \
+        (logistic_regression_grid_search_cv) \
+        (qubits_measurements_train, qubits_truths_train)
+
+    classifier_test(lg_grid, qubits_measurements_train, qubits_measurements_test, 
+        qubits_truths_train, qubits_truths_test)
 
 
 if __name__ == '__main__':
-    qubits_measurements, qubits_truths = load_datasets()
-    # qubits_measurements_histogram = picklize('qubits_measurements_histogram')(data_preprocessing)(5)
-    # qubits_measurements_train, qubits_measurements_test, qubits_truths_train, qubits_truths_test = data_train_test_split(
-    #     qubits_measurements_histogram, qubits_truths)
-    # mlp = picklize("mlp", overwrite=True)(mlp_classifier_train)(qubits_measurements_train, qubits_truths_train)
-    # mlp_classifier_test(qubits_measurements_train, qubits_measurements_test, qubits_truths_train, qubits_truths_test)
-
-    for histogram_num_buckets in range(2, 11):
-        qubits_measurements_histogram = picklize('qubits_measurements_histogram_{}'.format(histogram_num_buckets))(
-            data_preprocessing)(histogram_num_buckets)
-        qubits_measurements_train, qubits_measurements_test, qubits_truths_train, qubits_truths_test = data_train_test_split(
-            qubits_measurements_histogram, qubits_truths)
-        
-        grid_search_result = mlp_grid_search_cross_validation(qubits_measurements_train, qubits_truths_train)
-        grid_search_result.to_csv("mlp_grid_search_{}.csv".format(histogram_num_buckets))
+    run_mlp_classifier_in_paper()
+    # run_mlp()
+    # run_logistic_regression()

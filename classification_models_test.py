@@ -80,7 +80,8 @@ def get_arguments():
 
 
 def log(message):
-    sys.stderr.write(message + '\n')
+    # sys.stderr.write(message + '\n')
+    print(message, file=sys.stderr)
 
 
 def read_qubit_measurements():
