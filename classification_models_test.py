@@ -131,6 +131,7 @@ def threshold_cutoff_experiments():
 
     _accuracy_results = []
     # try to classify measurements with a range of cutoff values and look at their accuracy
+    # for threshold in range(12, 13):
     for threshold in range(0, _most_photons_received + 1):
         model = ThresholdCutoffModel(threshold)
         classify_qubits(model, qubit_measurements)
@@ -206,4 +207,5 @@ def threshold_cutoff_early_arrival_experiments():
 
 
 if __name__ == '__main__':
-    threshold_cutoff_early_arrival_experiments()
+    # threshold_cutoff_early_arrival_experiments()
+    threshold_cutoff_experiments()

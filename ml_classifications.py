@@ -9,6 +9,7 @@ from sklearn.neural_network import MLPClassifier
 from sklearn.metrics import classification_report, confusion_matrix
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
+from sklearn.ensemble import RandomForestClassifier
 
 from classification_models_test import log
 
@@ -149,9 +150,25 @@ def logistic_regression_grid_search_cv(qubits_measurements_train, qubits_truths_
         'clf__C': [10**-3, 10**-2, 10**-1, 10**0, 10**1, 10**2, 10**3]
     }
 
-    lg_grid = GridSearchCV(lg_pipeline, cv=4, n_jobs=-1, param_grid=lg_param_grid, scoring="accuracy", refit=True, verbose=1)
+    lg_grid = GridSearchCV(lg_pipeline, cv=4, n_jobs=-1, param_grid=lg_param_grid, scoring="accuracy", refit=True, verbose=2)
     lg_grid.fit(qubits_measurements_train, qubits_truths_train)
     return lg_grid
+
+
+# Random Forest
+def random_forest_grid_search_cv(qubits_measurements_train, qubits_truths_train):
+    log("Starting Grid Search with Cross Validation on Random Forest Classifier.")
+    
+    rf_pipeline = Pipeline([
+        ('hstgm', Histogramize(num_buckets=6)),
+        ('clf', RandomForestClassifier())
+    ])
+
+    rf_param_grid = {}
+
+    rf_grid = GridSearchCV(rf_pipeline, cv=4, n_jobs=-1, param_grid=rf_param_grid, scoring="accuracy", verbose=2)
+    rf_grid.fit(qubits_measurements_train, qubits_truths_train)
+    return rf_grid
 
 
 # Main Tasks
@@ -198,7 +215,21 @@ def run_logistic_regression():
         qubits_truths_train, qubits_truths_test)
 
 
+def run_random_forest():
+    qubits_measurements, qubits_truths = load_datasets()
+    qubits_measurements_train, qubits_measurements_test, qubits_truths_train, qubits_truths_test = \
+        train_test_split(qubits_measurements, qubits_truths, test_size=0.20, random_state=42)
+        
+    rf_grid = picklize('random_forest_grid_search_cv') \
+        (random_forest_grid_search_cv)(qubits_measurements_train, qubits_truths_train)
+    log(pd.DataFrame(rf_grid.cv_results_))
+
+    classifier_test(rf_grid, qubits_measurements_train, qubits_measurements_test, 
+        qubits_truths_train, qubits_truths_test)
+
+
 if __name__ == '__main__':
     # run_mlp_classifier_in_paper()
-    run_mlp()
-    # run_logistic_regression()
+    # run_mlp()
+    run_logistic_regression()
+    # run_random_forest()
