@@ -97,6 +97,8 @@ def classifier_train(classifier, qubits_measurements_train, qubits_truths_train)
     classifier.fit(qubits_measurements_train, qubits_truths_train)
     return classifier
 
+_classifier_test_counter = 0
+CLASSIFIER_TEST_OUTPUT_FILENAME_BASE = 'classifier_test_result'
 
 def classifier_test(classifier, qubits_measurements_train, qubits_measurements_test, 
         qubits_truths_train, qubits_truths_test):
@@ -112,6 +114,33 @@ def classifier_test(classifier, qubits_measurements_train, qubits_measurements_t
     print("Classification Report on Testing Data:")
     print(confusion_matrix(qubits_truths_test, qubits_predict_test))
     print(classification_report(qubits_truths_test, qubits_predict_test, digits=8))
+
+    # Print out all instances of false positives and false negatives in the test set
+    assert(len(qubits_measurements_train) == len(qubits_truths_train) == len(qubits_predict_train))
+    assert(len(qubits_measurements_test) == len(qubits_truths_test) == len(qubits_predict_test))
+    false_positives_test = list(map(
+        lambda index: qubits_measurements_test[index], 
+        list(filter(
+            lambda index: qubits_truths_test[index] == 0 and qubits_predict_test[index] == 1, 
+            range(len(qubits_measurements_test))))))
+    false_negatives_test = list(map(
+        lambda index: qubits_measurements_test[index], 
+        list(filter(
+            lambda index: qubits_truths_test[index] == 1 and qubits_predict_test[index] == 0, 
+            range(len(qubits_measurements_test))))))
+
+    output_filename = "{base}_{counter}.txt".format(
+        base=CLASSIFIER_TEST_OUTPUT_FILENAME_BASE, counter=_classifier_test_counter)
+    with open(output_filename, 'w') as file:
+        file.write("False Positives: \n")
+        for instance in false_positives_test:
+            file.write(str(list(instance)) + '\n')
+        file.write("\nFalse Negatives: \n")
+        for instance in false_negatives_test:
+            file.write(str(list(instance)) + '\n')
+
+    _classifier_test_counter += 1
+    log("Falsely-classified instances written to the report file.")
 
 
 # MLP Classifier
@@ -182,7 +211,7 @@ def run_mlp_classifier_in_paper():
     qubits_measurements_train_histogram = histogramizer.transform(qubits_measurements_train)
     qubits_measurements_test_histogram = histogramizer.transform(qubits_measurements_test)
 
-    mlp = picklize("mlp", overwrite=True)(classifier_train)(
+    mlp = picklize("mlp")(classifier_train)(
         MLPClassifier(hidden_layer_sizes=(8, 8), activation='relu', solver='adam'),  # 2-layer feed-forward neural network used in the paper
         qubits_measurements_train_histogram, qubits_truths_train)
     classifier_test(mlp, qubits_measurements_train_histogram, qubits_measurements_test_histogram, 
@@ -231,7 +260,7 @@ def run_random_forest():
 
 
 if __name__ == '__main__':
-    # run_mlp_classifier_in_paper()
+    run_mlp_classifier_in_paper()
     # run_mlp()
-    run_logistic_regression()
+    # run_logistic_regression()
     # run_random_forest()
