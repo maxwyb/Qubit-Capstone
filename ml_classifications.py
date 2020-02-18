@@ -3,13 +3,13 @@ import numpy as np
 import csv
 import pickle
 from os import path
-from sklearn.base import BaseEstimator, TransformerMixin
-from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.base import BaseEstimator, TransformerMixin, ClassifierMixin
+from sklearn.model_selection import train_test_split, GridSearchCV, KFold
 from sklearn.neural_network import MLPClassifier
-from sklearn.metrics import classification_report, confusion_matrix
+from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import RandomForestClassifier, VotingClassifier
 
 from classification_models_test import log
 
@@ -72,13 +72,17 @@ def load_datasets():
         (bright_qubits_measurements + dark_qubits_measurements), 
         (bright_qubits_ground_truths + dark_qubits_ground_truths))
 
+RANDOM_SEED = 42
 
 # Data pre-processing
 BEST_ARRIVAL_TIME_THRESHOLD = 0.00529914
 
+PRE_ARRIVAL_TIME_THRESHOLD = 0.000722906  # from "Distribution of Photons Arrival Times" graph
+POST_ARRIVAL_TIME_THRSHOLD = 0.00522625
+
 
 class Histogramize(BaseEstimator, TransformerMixin):
-    def __init__(self, arrival_time_threshold=BEST_ARRIVAL_TIME_THRESHOLD, num_buckets=5):
+    def __init__(self, arrival_time_threshold=(0, BEST_ARRIVAL_TIME_THRESHOLD), num_buckets=6):
         self.arrival_time_threshold = arrival_time_threshold
         self.num_buckets = num_buckets
     
@@ -86,22 +90,43 @@ class Histogramize(BaseEstimator, TransformerMixin):
         return self
 
     def transform(self, X, y=None):
-        histogram_bins = np.linspace(0, self.arrival_time_threshold, num=(self.num_buckets + 1), endpoint=True)
+        histogram_bins = np.linspace(
+            self.arrival_time_threshold[0], self.arrival_time_threshold[1], 
+            num=(self.num_buckets+1), endpoint=True)
         return list(map(
             lambda measurement: np.histogram(measurement, bins=histogram_bins)[0], X))
 
 
 # Classifiers
+BEST_PHOTON_COUNT_THRESHOLD = 12
+
+class ThresholdCutoffClassifier(BaseEstimator, ClassifierMixin):
+    """
+    Given a histogram of photons' arrival times as the data instance, 
+    classify the qubit by counting the number of captured photons
+    """
+    def __init__(self, threshold=BEST_PHOTON_COUNT_THRESHOLD):
+        self.threshold = threshold
+
+    def fit(self, X, y):
+        return self
+
+    def predict(self, X):
+        return list(map(lambda instance: 0 if sum(instance) > self.threshold else 1, X))
+
+
 def classifier_train(classifier, qubits_measurements_train, qubits_truths_train):
     log("Training Classifier: {}".format(classifier))
     classifier.fit(qubits_measurements_train, qubits_truths_train)
     return classifier
+
 
 _classifier_test_counter = 0
 CLASSIFIER_TEST_OUTPUT_FILENAME_BASE = 'classifier_test_result'
 
 def classifier_test(classifier, qubits_measurements_train, qubits_measurements_test, 
         qubits_truths_train, qubits_truths_test):
+    global _classifier_test_counter
     log("Testing classifier: {}".format(classifier))
 
     qubits_predict_train = classifier.predict(qubits_measurements_train)
@@ -132,7 +157,9 @@ def classifier_test(classifier, qubits_measurements_train, qubits_measurements_t
     output_filename = "{base}_{counter}.txt".format(
         base=CLASSIFIER_TEST_OUTPUT_FILENAME_BASE, counter=_classifier_test_counter)
     with open(output_filename, 'w') as file:
-        file.write("False Positives: \n")
+        file.write("Classifier: \n")
+        file.write(str(classifier))
+        file.write("\nFalse Positives: \n")
         for instance in false_positives_test:
             file.write(str(list(instance)) + '\n')
         file.write("\nFalse Negatives: \n")
@@ -141,6 +168,8 @@ def classifier_test(classifier, qubits_measurements_train, qubits_measurements_t
 
     _classifier_test_counter += 1
     log("Falsely-classified instances written to the report file.")
+
+    return accuracy_score(qubits_truths_test, qubits_predict_test)
 
 
 # MLP Classifier
@@ -169,7 +198,7 @@ def logistic_regression_grid_search_cv(qubits_measurements_train, qubits_truths_
     log("Starting Grid Search with Cross Validation on Logistic Regression models.")
 
     lg_pipeline = Pipeline([
-        ('hstgm', Histogramize(arrival_time_threshold=BEST_ARRIVAL_TIME_THRESHOLD, num_buckets=6)),
+        ('hstgm', Histogramize(num_buckets=6)),
         ('clf', LogisticRegression(solver='liblinear', random_state=42))
     ])
 
@@ -198,6 +227,32 @@ def random_forest_grid_search_cv(qubits_measurements_train, qubits_truths_train)
     rf_grid = GridSearchCV(rf_pipeline, cv=4, n_jobs=-1, param_grid=rf_param_grid, scoring="accuracy", verbose=2)
     rf_grid.fit(qubits_measurements_train, qubits_truths_train)
     return rf_grid
+
+
+# Majority Vote with improved Feed-forward Neural Network
+def majority_vote_grid_search_cv(qubits_measurements_train, qubits_truths_train):
+    log("Starting Grid Search with Cross Validation on Majority Vote Classifier.")
+
+    mv_pipeline = Pipeline([
+        ('hstgm', Histogramize(
+            arrival_time_threshold=(PRE_ARRIVAL_TIME_THRESHOLD, POST_ARRIVAL_TIME_THRSHOLD))),
+        ('clf', VotingClassifier([
+            ('mlp', 
+                MLPClassifier(activation='relu', solver='adam', hidden_layer_sizes=(32, 32), random_state=RANDOM_SEED)),
+            ('lg', 
+                LogisticRegression(solver='liblinear', penalty='l2', C=10**-3, random_state=RANDOM_SEED)),
+            ('tc', 
+                ThresholdCutoffClassifier(threshold=BEST_PHOTON_COUNT_THRESHOLD))
+        ]))
+    ])
+
+    mv_param_grid = {
+        'hstgm__num_buckets': range(2, 33)
+    }
+
+    mv_grid = GridSearchCV(mv_pipeline, cv=4, n_jobs=-1, param_grid=mv_param_grid, scoring="accuracy", refit=True, verbose=2)
+    mv_grid.fit(qubits_measurements_train, qubits_truths_train)
+    return mv_grid
 
 
 # Main Tasks
@@ -259,8 +314,44 @@ def run_random_forest():
         qubits_truths_train, qubits_truths_test)
 
 
+def run_majority_vote_with_kfold_data_split():
+    """
+    Split the dataset 5 times into 80% training and 20% testing, 
+    perform Majority Vote classification on each set, and report
+    the average accuracy across the 5 folds.
+    """
+    qubits_measurements, qubits_truths = load_datasets()
+    qubits_measurements = np.array(qubits_measurements)
+    qubits_truths = np.array(qubits_truths)
+
+    kf = KFold(n_splits=5, shuffle=True, random_state=RANDOM_SEED)
+    clf_accuracies = []
+    _i_fold = 0
+    for train_index, test_index in kf.split(qubits_measurements):
+        _i_fold += 1
+        log("Train/Test data split {fold}-th fold.".format(fold=_i_fold))
+
+        qubits_measurements_train, qubits_measurements_test, qubits_truths_train, qubits_truths_test = \
+            qubits_measurements[train_index], qubits_measurements[test_index], \
+            qubits_truths[train_index], qubits_truths[test_index]
+
+        mv_grid = picklize("majority_vote_grid_search_cv_{fold}".format(fold=_i_fold)) \
+            (majority_vote_grid_search_cv)(qubits_measurements_train, qubits_truths_train)
+        print(mv_grid.best_params_)
+
+        curr_accuracy = classifier_test(mv_grid, qubits_measurements_train, qubits_measurements_test, 
+                qubits_truths_train, qubits_truths_test)
+        print("Train/test split {fold}-th fold accuracy: {accuracy}".format(fold=_i_fold, accuracy=curr_accuracy))
+        clf_accuracies.append(curr_accuracy)
+    
+    avg_accuracy = sum(clf_accuracies) / len(clf_accuracies)
+    print("Majority Vote with KFold Data Split: Average Accuracy = {accuracy}".format(accuracy=avg_accuracy))
+    
+
 if __name__ == '__main__':
-    run_mlp_classifier_in_paper()
+    # run_mlp_classifier_in_paper()
     # run_mlp()
     # run_logistic_regression()
     # run_random_forest()
+    run_majority_vote_with_kfold_data_split()
+    log("Done.")
