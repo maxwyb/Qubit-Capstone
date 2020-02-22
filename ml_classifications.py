@@ -129,19 +129,19 @@ def classifier_test(classifier, qubits_measurements_train, qubits_measurements_t
     global _classifier_test_counter
     log("Testing classifier: {}".format(classifier))
 
-    qubits_predict_train = classifier.predict(qubits_measurements_train)
+    # qubits_predict_train = classifier.predict(qubits_measurements_train)
     qubits_predict_test = classifier.predict(qubits_measurements_test)
 
-    print("Classification Report on Training Data:")
-    print(confusion_matrix(qubits_truths_train, qubits_predict_train))
-    print(classification_report(qubits_truths_train, qubits_predict_train, digits=8))
+    # print("Classification Report on Training Data:")
+    # print(confusion_matrix(qubits_truths_train, qubits_predict_train))
+    # print(classification_report(qubits_truths_train, qubits_predict_train, digits=8))
 
     print("Classification Report on Testing Data:")
     print(confusion_matrix(qubits_truths_test, qubits_predict_test))
     print(classification_report(qubits_truths_test, qubits_predict_test, digits=8))
 
     # Print out all instances of false positives and false negatives in the test set
-    assert(len(qubits_measurements_train) == len(qubits_truths_train) == len(qubits_predict_train))
+    # assert(len(qubits_measurements_train) == len(qubits_truths_train) == len(qubits_predict_train))
     assert(len(qubits_measurements_test) == len(qubits_truths_test) == len(qubits_predict_test))
     false_positives_test = list(map(
         lambda index: qubits_measurements_test[index], 
@@ -288,6 +288,37 @@ def run_mlp():
         qubits_truths_train, qubits_truths_test)
 
 
+def run_mlp_with_kfold_data_split():
+    """
+    Run the best model gotten from "run_mlp", but using 5-fold training/testing dataset split
+    """
+    qubits_measurements, qubits_truths = tuple(map(lambda dataset: np.array(dataset), load_datasets()))
+
+    kf = KFold(n_splits=5, shuffle=True, random_state=RANDOM_SEED)
+    clf_accuracies = []
+    _i_fold = 0
+    for train_index, test_index in kf.split(qubits_measurements):
+        _i_fold += 1
+        log("Train/Test data split {fold}-th fold.".format(fold=_i_fold))
+
+        qubits_measurements_train, qubits_measurements_test, qubits_truths_train, qubits_truths_test = \
+            qubits_measurements[train_index], qubits_measurements[test_index], \
+            qubits_truths[train_index], qubits_truths[test_index]
+
+        mlp_pipeline = classifier_train(Pipeline([
+                ('hstgm', Histogramize(num_buckets=6, arrival_time_threshold=(0, BEST_ARRIVAL_TIME_THRESHOLD))),
+                ('clf', MLPClassifier(hidden_layer_sizes=(32, 32), activation='relu', solver='adam'))
+            ]), qubits_measurements_train, qubits_truths_train)
+
+        curr_accuracy = classifier_test(mlp_pipeline, qubits_measurements_train, qubits_measurements_test, 
+                qubits_truths_train, qubits_truths_test)
+        print("Train/test split {fold}-th fold accuracy: {accuracy}".format(fold=_i_fold, accuracy=curr_accuracy))
+        clf_accuracies.append(curr_accuracy)
+    
+    avg_accuracy = sum(clf_accuracies) / len(clf_accuracies)
+    print("Majority Vote with KFold Data Split: Average Accuracy = {accuracy}".format(accuracy=avg_accuracy))
+
+
 def run_logistic_regression():
     qubits_measurements, qubits_truths = load_datasets()
     qubits_measurements_train, qubits_measurements_test, qubits_truths_train, qubits_truths_test = \
@@ -353,5 +384,6 @@ if __name__ == '__main__':
     # run_mlp()
     # run_logistic_regression()
     # run_random_forest()
-    run_majority_vote_with_kfold_data_split()
+    # run_majority_vote_with_kfold_data_split()
+    run_mlp_with_kfold_data_split()
     log("Done.")
