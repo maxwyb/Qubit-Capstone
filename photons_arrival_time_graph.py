@@ -6,6 +6,7 @@ from matplotlib import pyplot as plt
 def log(message):
     print(message, file=sys.stderr)
 
+
 BRIGHT_QUBITS_DATASETS = [
     'Data4Jens/BrightTimeTagSet1.csv',
     'Data4Jens/BrightTimeTagSet2.csv',

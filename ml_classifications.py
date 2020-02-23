@@ -125,23 +125,26 @@ _classifier_test_counter = 0
 CLASSIFIER_TEST_OUTPUT_FILENAME_BASE = 'classifier_test_result'
 
 def classifier_test(classifier, qubits_measurements_train, qubits_measurements_test, 
-        qubits_truths_train, qubits_truths_test):
+        qubits_truths_train, qubits_truths_test, test_training=False):
     global _classifier_test_counter
     log("Testing classifier: {}".format(classifier))
 
-    # qubits_predict_train = classifier.predict(qubits_measurements_train)
+    if test_training:
+        qubits_predict_train = classifier.predict(qubits_measurements_train)
     qubits_predict_test = classifier.predict(qubits_measurements_test)
 
-    # print("Classification Report on Training Data:")
-    # print(confusion_matrix(qubits_truths_train, qubits_predict_train))
-    # print(classification_report(qubits_truths_train, qubits_predict_train, digits=8))
+    if test_training:
+        print("Classification Report on Training Data:")
+        print(confusion_matrix(qubits_truths_train, qubits_predict_train))
+        print(classification_report(qubits_truths_train, qubits_predict_train, digits=8))
 
     print("Classification Report on Testing Data:")
     print(confusion_matrix(qubits_truths_test, qubits_predict_test))
     print(classification_report(qubits_truths_test, qubits_predict_test, digits=8))
 
     # Print out all instances of false positives and false negatives in the test set
-    # assert(len(qubits_measurements_train) == len(qubits_truths_train) == len(qubits_predict_train))
+    if test_training:
+        assert(len(qubits_measurements_train) == len(qubits_truths_train) == len(qubits_predict_train))
     assert(len(qubits_measurements_test) == len(qubits_truths_test) == len(qubits_predict_test))
     false_positives_test = list(map(
         lambda index: qubits_measurements_test[index], 
@@ -154,17 +157,15 @@ def classifier_test(classifier, qubits_measurements_train, qubits_measurements_t
             lambda index: qubits_truths_test[index] == 1 and qubits_predict_test[index] == 0, 
             range(len(qubits_measurements_test))))))
 
-    output_filename = "{base}_{counter}.txt".format(
+    output_filename = "{base}_{counter}.csv".format(
         base=CLASSIFIER_TEST_OUTPUT_FILENAME_BASE, counter=_classifier_test_counter)
     with open(output_filename, 'w') as file:
-        file.write("Classifier: \n")
-        file.write(str(classifier))
-        file.write("\nFalse Positives: \n")
+        csv_writer = csv.writer(file)
+        csv_writer.writerow([str(classifier)])
         for instance in false_positives_test:
-            file.write(str(list(instance)) + '\n')
-        file.write("\nFalse Negatives: \n")
+            csv_writer.writerow(["FALSE_POSITIVE"] + list(instance))
         for instance in false_negatives_test:
-            file.write(str(list(instance)) + '\n')
+            csv_writer.writerow(["FALSE_NEGATIVE"] + list(instance))
 
     _classifier_test_counter += 1
     log("Falsely-classified instances written to the report file.")
