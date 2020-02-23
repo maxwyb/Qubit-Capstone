@@ -109,7 +109,9 @@ if __name__ == '__main__':
     # draw_plot([1, 1, 1, 5, 5, 2], [1, 1, 1, 5, 5, 2])
     dataset = load_datasets()
     fp_instances, fn_instances = \
-        load_classifier_test_results(['classifier_test_result_{}.csv'.format(n) for n in range(0, 5)])
+        load_classifier_test_results(
+            ['classifier_test_result_mlp_{}.csv'.format(n) for n in range(0, 5)]
+            + ['classifier_test_result_mlp_kfold_{}.csv'.format(n) for n in range(0, 5)])
     fp_indices = find_instances_indices(dataset, fp_instances)
     fn_indices = find_instances_indices(dataset, fn_instances)
     draw_plot(fp_indices, fn_indices)

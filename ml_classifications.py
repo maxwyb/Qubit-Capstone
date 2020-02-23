@@ -177,7 +177,7 @@ def classifier_test(classifier, qubits_measurements_train, qubits_measurements_t
 
 
 # MLP Classifier
-def mlp_grid_search_cv(qubits_measurements_train, qubits_truths_train):
+def mlp_grid_search_cv(qubits_measurements_train, qubits_truths_train, num_layers):
     log("Starting Grid Search with Cross Validation on MLP Classifier.")
     
     mlp_pipeline = Pipeline([
@@ -188,7 +188,7 @@ def mlp_grid_search_cv(qubits_measurements_train, qubits_truths_train):
     mlp_param_grid = {
         # 'hstgm__num_buckets': range(2, 33),
         'hstgm__arrival_time_threshold': [(0, BEST_ARRIVAL_TIME_THRESHOLD), (0, POST_ARRIVAL_TIME_THRSHOLD)],
-        'clf__hidden_layer_sizes': [(n, n) for n in range(8, 41)]
+        'clf__hidden_layer_sizes': [(n,) * num_layers for n in range(8, 41)]
         # 'clf__learning_rate_init': [0.001, 0.0005],
         # 'clf__max_iter': [200, 500]
     }
@@ -278,7 +278,7 @@ def run_mlp_classifier_in_paper():
         qubits_truths_train, qubits_truths_test)
 
 
-def run_mlp():
+def run_mlp_grid_search_cv():
     qubits_measurements, qubits_truths = load_datasets()
     qubits_measurements_train, qubits_measurements_test, qubits_truths_train, qubits_truths_test = \
         train_test_split(qubits_measurements, qubits_truths, test_size=0.20, random_state=42)
@@ -296,6 +296,8 @@ def run_mlp():
 def run_mlp_with_kfold_data_split():
     """
     Run the best model gotten from "run_mlp", but using 5-fold training/testing dataset split
+    (32 neurons per layer, 2 layers, photons cutoff at BEST_ARRIVAL_TIME_THRESHOLD)
+    This is the model presented on 01/30/2020 meeting
     """
     qubits_measurements, qubits_truths = tuple(map(lambda dataset: np.array(dataset), load_datasets()))
 
@@ -324,7 +326,7 @@ def run_mlp_with_kfold_data_split():
     print("Majority Vote with KFold Data Split: Average Accuracy = {accuracy}".format(accuracy=avg_accuracy))
 
 
-def run_mlp_grid_search_cv_with_kfold_data_split():
+def run_mlp_grid_search_cv_with_kfold_data_split(num_layers=2):
     """
     In each fold of the 5-fold training/testing data split, grid search for the best params in MLPClassifier
     and get the average accuracy
@@ -342,11 +344,14 @@ def run_mlp_grid_search_cv_with_kfold_data_split():
             qubits_measurements[train_index], qubits_measurements[test_index], \
             qubits_truths[train_index], qubits_truths[test_index]
 
-        mlp_grid = picklize('mlp_grid_search_cv_kfold_{fold}'.format(fold=_i_fold)) \
-            (mlp_grid_search_cv)(qubits_measurements_train, qubits_truths_train)
-        # log(pd.DataFrame(mlp_grid.cv_results_))
-        print("Best parameters found in Grid Search:")
+        mlp_grid = picklize('mlp_grid_search_cv_kfold_{layer}layers_{fold}'.format(layer=num_layers, fold=_i_fold)) \
+            (mlp_grid_search_cv)(qubits_measurements_train, qubits_truths_train, num_layers)
+        print("Best params found by Grid Search: ")
         print(mlp_grid.best_params_)
+        with pd.option_context('display.max_rows', None, 'display.max_columns', None, 'display.width', 1200):
+            print(pd.DataFrame(mlp_grid.cv_results_)[
+                ['param_hstgm__arrival_time_threshold', 'param_clf__hidden_layer_sizes', 'mean_test_score', 'std_test_score', 'rank_test_score']] \
+                    .sort_values('mean_test_score', ascending=False))
 
         curr_accuracy = classifier_test(mlp_grid, qubits_measurements_train, qubits_measurements_test, 
                 qubits_truths_train, qubits_truths_test)
@@ -406,7 +411,11 @@ def run_majority_vote_with_kfold_data_split():
 
         mv_grid = picklize("majority_vote_grid_search_cv_{fold}".format(fold=_i_fold)) \
             (majority_vote_grid_search_cv)(qubits_measurements_train, qubits_truths_train)
+        print("Best params found by Grid Search: ")
         print(mv_grid.best_params_)
+        print(pd.DataFrame(mv_grid.cv_results_)[
+            ['param_hstgm__num_buckets', 'mean_test_score', 'std_test_score', 'rank_test_score']] \
+                .sort_values('mean_test_score', ascending=False))
 
         curr_accuracy = classifier_test(mv_grid, qubits_measurements_train, qubits_measurements_test, 
                 qubits_truths_train, qubits_truths_test)
@@ -424,5 +433,5 @@ if __name__ == '__main__':
     # run_random_forest()
     # run_majority_vote_with_kfold_data_split()
     # run_mlp_with_kfold_data_split()
-    run_mlp_grid_search_cv_with_kfold_data_split()
+    run_mlp_grid_search_cv_with_kfold_data_split(4)
     log("Done.")
