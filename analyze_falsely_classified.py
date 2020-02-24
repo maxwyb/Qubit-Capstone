@@ -73,6 +73,16 @@ def find_instances_indices(dataset, instances):
     return list(map(lambda instance: dataset.index(instance), instances))
 
 
+def write_instances_to_file(dataset, fp_indices, fn_indices):
+    def _write(dataset, indices, filename):
+        with open(filename, 'w') as file:
+            csv_writer = csv.writer(file)
+            for index in set(indices):
+                csv_writer.writerow(dataset[index])
+    _write(dataset, fp_indices, 'false_positive_instances.csv')
+    _write(dataset, fn_indices, 'false_negative_instances.csv')
+
+
 def draw_plot(fp_indices, fn_indices):
     log("Plotting instances frequency plot.")
     fp_index_frequency = defaultdict(int)
@@ -94,13 +104,13 @@ def draw_plot(fp_indices, fn_indices):
     ax.set_title("False Positive Instances")
     ax.set_xlabel("Instance Index")
     ax.set_ylabel("Occurrences")
-    ax.bar(fp_index_frequency.keys(), fp_index_frequency.values())
+    ax.bar(list(map(lambda index: str(index), fp_index_frequency.keys())), fp_index_frequency.values())
 
     ax = plt.subplot(2, 1, 2)
     ax.set_title("False Negative Instances")
     ax.set_xlabel("Instance Index")
     ax.set_ylabel("Occurrences")
-    ax.bar(fn_index_frequency.keys(), fn_index_frequency.values())
+    ax.bar(list(map(lambda index: str(index), fn_index_frequency.keys())), fn_index_frequency.values())
     
     plt.show()
 
@@ -108,11 +118,12 @@ def draw_plot(fp_indices, fn_indices):
 if __name__ == '__main__':
     # draw_plot([1, 1, 1, 5, 5, 2], [1, 1, 1, 5, 5, 2])
     dataset = load_datasets()
-    fp_instances, fn_instances = \
-        load_classifier_test_results(
-            ['classifier_test_result_mlp_{}.csv'.format(n) for n in range(0, 5)]
-            + ['classifier_test_result_mlp_kfold_{}.csv'.format(n) for n in range(0, 5)])
+    fp_instances, fn_instances = load_classifier_test_results(
+            # ['classifier_test_result_mlp_{}.csv'.format(n) for n in range(0, 5)]
+            # + ['classifier_test_result_mlp_kfold_{}.csv'.format(n) for n in range(0, 5)])
+            ['classifier_test_result_{}.csv'.format(n) for n in range(0, 15)])
     fp_indices = find_instances_indices(dataset, fp_instances)
     fn_indices = find_instances_indices(dataset, fn_instances)
     draw_plot(fp_indices, fn_indices)
+    write_instances_to_file(dataset, fp_indices, fn_indices)
     log("Done.")

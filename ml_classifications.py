@@ -31,7 +31,7 @@ DARK_QUBITS_DATASETS = [
 
 def log(message):
     # sys.stderr.write(message + '\n')
-    print(message, file=sys.stdout)
+    print(message, file=sys.stderr)
 
 
 def picklize(db_id, overwrite=False):
@@ -181,13 +181,14 @@ def mlp_grid_search_cv(qubits_measurements_train, qubits_truths_train, num_layer
     log("Starting Grid Search with Cross Validation on MLP Classifier.")
     
     mlp_pipeline = Pipeline([
-        ('hstgm', Histogramize(num_buckets=6)),
+        # ('hstgm', Histogramize(num_buckets=6)),
+        ('hstgm', Histogramize(arrival_time_threshold=(0, POST_ARRIVAL_TIME_THRSHOLD))),
         ('clf', MLPClassifier(activation='relu', solver='adam'))
     ])
 
     mlp_param_grid = {
-        # 'hstgm__num_buckets': range(2, 33),
-        'hstgm__arrival_time_threshold': [(0, BEST_ARRIVAL_TIME_THRESHOLD), (0, POST_ARRIVAL_TIME_THRSHOLD)],
+        'hstgm__num_buckets': range(1, 33),
+        # 'hstgm__arrival_time_threshold': [(0, BEST_ARRIVAL_TIME_THRESHOLD), (0, POST_ARRIVAL_TIME_THRSHOLD)],
         'clf__hidden_layer_sizes': [(n,) * num_layers for n in range(8, 41)]
         # 'clf__learning_rate_init': [0.001, 0.0005],
         # 'clf__max_iter': [200, 500]
@@ -323,7 +324,7 @@ def run_mlp_with_kfold_data_split():
         clf_accuracies.append(curr_accuracy)
     
     avg_accuracy = sum(clf_accuracies) / len(clf_accuracies)
-    print("Majority Vote with KFold Data Split: Average Accuracy = {accuracy}".format(accuracy=avg_accuracy))
+    print("MLP with KFold Data Split: Average Accuracy = {accuracy}".format(accuracy=avg_accuracy))
 
 
 def run_mlp_grid_search_cv_with_kfold_data_split(num_layers=2):
@@ -344,14 +345,15 @@ def run_mlp_grid_search_cv_with_kfold_data_split(num_layers=2):
             qubits_measurements[train_index], qubits_measurements[test_index], \
             qubits_truths[train_index], qubits_truths[test_index]
 
-        mlp_grid = picklize('mlp_grid_search_cv_kfold_{layer}layers_{fold}'.format(layer=num_layers, fold=_i_fold)) \
+        # NOTE: 02/23 model, naming scheme to be improved
+        mlp_grid = picklize('mlp_grid_search_cv_kfold_{layer}layers_0223_{fold}'.format(layer=num_layers, fold=_i_fold)) \
             (mlp_grid_search_cv)(qubits_measurements_train, qubits_truths_train, num_layers)
         print("Best params found by Grid Search: ")
         print(mlp_grid.best_params_)
-        with pd.option_context('display.max_rows', None, 'display.max_columns', None, 'display.width', 1200):
-            print(pd.DataFrame(mlp_grid.cv_results_)[
-                ['param_hstgm__arrival_time_threshold', 'param_clf__hidden_layer_sizes', 'mean_test_score', 'std_test_score', 'rank_test_score']] \
-                    .sort_values('mean_test_score', ascending=False))
+        # with pd.option_context('display.max_rows', None, 'display.max_columns', None, 'display.width', 1200):
+        #     print(pd.DataFrame(mlp_grid.cv_results_)[
+        #         ['param_hstgm__arrival_time_threshold', 'param_clf__hidden_layer_sizes', 'mean_test_score', 'std_test_score', 'rank_test_score']] \
+        #             .sort_values('mean_test_score', ascending=False))
 
         curr_accuracy = classifier_test(mlp_grid, qubits_measurements_train, qubits_measurements_test, 
                 qubits_truths_train, qubits_truths_test)
@@ -359,10 +361,42 @@ def run_mlp_grid_search_cv_with_kfold_data_split(num_layers=2):
         clf_accuracies.append(curr_accuracy)
     
     avg_accuracy = sum(clf_accuracies) / len(clf_accuracies)
-    print("Majority Vote with KFold Data Split: Average Accuracy = {accuracy}".format(accuracy=avg_accuracy))
+    print("MLP with KFold Data Split: Average Accuracy = {accuracy}".format(accuracy=avg_accuracy))
 
 
-def run_logistic_regression():
+def run_logistic_regression_with_kfold_data_split():
+    """
+    Logistic Regression with the best parameters found before, using 5-fold data split
+    Mostly concerned with the falsely-classified instances fed to further analysis
+    """
+    qubits_measurements, qubits_truths = tuple(map(lambda dataset: np.array(dataset), load_datasets()))
+
+    kf = KFold(n_splits=5, shuffle=True, random_state=RANDOM_SEED)
+    clf_accuracies = []
+    _i_fold = 0
+    for train_index, test_index in kf.split(qubits_measurements):
+        _i_fold += 1
+        log("Train/Test data split {fold}-th fold.".format(fold=_i_fold))
+
+        qubits_measurements_train, qubits_measurements_test, qubits_truths_train, qubits_truths_test = \
+            qubits_measurements[train_index], qubits_measurements[test_index], \
+            qubits_truths[train_index], qubits_truths[test_index]
+
+        lg_pipeline = classifier_train(Pipeline([
+                ('hstgm', Histogramize(num_buckets=6, arrival_time_threshold=(0, BEST_ARRIVAL_TIME_THRESHOLD))),
+                ('clf', LogisticRegression(solver='liblinear', random_state=RANDOM_SEED, penalty='l2', C=10**-3))
+            ]), qubits_measurements_train, qubits_truths_train)
+
+        curr_accuracy = classifier_test(lg_pipeline, qubits_measurements_train, qubits_measurements_test, 
+                qubits_truths_train, qubits_truths_test)
+        print("Train/test split {fold}-th fold accuracy: {accuracy}".format(fold=_i_fold, accuracy=curr_accuracy))
+        clf_accuracies.append(curr_accuracy)
+    
+    avg_accuracy = sum(clf_accuracies) / len(clf_accuracies)
+    print("Logistic Regression with KFold Data Split: Average Accuracy = {accuracy}".format(accuracy=avg_accuracy))
+
+
+def run_logistic_regression_grid_search_cv():
     qubits_measurements, qubits_truths = load_datasets()
     qubits_measurements_train, qubits_measurements_test, qubits_truths_train, qubits_truths_test = \
         train_test_split(qubits_measurements, qubits_truths, test_size=0.20, random_state=42)
@@ -375,7 +409,39 @@ def run_logistic_regression():
         qubits_truths_train, qubits_truths_test)
 
 
-def run_random_forest():
+def run_random_forest_with_kfold_data_split():
+    """
+    Random forest with the best parameters found before (currently no parameter), using 5-fold data split
+    Mostly concerned with the falsely-classified instances fed to further analysis
+    """
+    qubits_measurements, qubits_truths = tuple(map(lambda dataset: np.array(dataset), load_datasets()))
+
+    kf = KFold(n_splits=5, shuffle=True, random_state=RANDOM_SEED)
+    clf_accuracies = []
+    _i_fold = 0
+    for train_index, test_index in kf.split(qubits_measurements):
+        _i_fold += 1
+        log("Train/Test data split {fold}-th fold.".format(fold=_i_fold))
+
+        qubits_measurements_train, qubits_measurements_test, qubits_truths_train, qubits_truths_test = \
+            qubits_measurements[train_index], qubits_measurements[test_index], \
+            qubits_truths[train_index], qubits_truths[test_index]
+
+        rf_pipeline = classifier_train(Pipeline([
+                ('hstgm', Histogramize(num_buckets=6, arrival_time_threshold=(0, BEST_ARRIVAL_TIME_THRESHOLD))),
+                ('clf', RandomForestClassifier())
+            ]), qubits_measurements_train, qubits_truths_train)
+
+        curr_accuracy = classifier_test(rf_pipeline, qubits_measurements_train, qubits_measurements_test, 
+                qubits_truths_train, qubits_truths_test)
+        print("Train/test split {fold}-th fold accuracy: {accuracy}".format(fold=_i_fold, accuracy=curr_accuracy))
+        clf_accuracies.append(curr_accuracy)
+    
+    avg_accuracy = sum(clf_accuracies) / len(clf_accuracies)
+    print("Random Forest with KFold Data Split: Average Accuracy = {accuracy}".format(accuracy=avg_accuracy))
+
+
+def run_random_forest_grid_search_cv():
     qubits_measurements, qubits_truths = load_datasets()
     qubits_measurements_train, qubits_measurements_test, qubits_truths_train, qubits_truths_test = \
         train_test_split(qubits_measurements, qubits_truths, test_size=0.20, random_state=42)
@@ -428,10 +494,12 @@ def run_majority_vote_with_kfold_data_split():
 
 if __name__ == '__main__':
     # run_mlp_classifier_in_paper()
-    # run_mlp()
-    # run_logistic_regression()
-    # run_random_forest()
+    # run_mlp_grid_search_cv()
+    run_mlp_with_kfold_data_split()
+    # run_mlp_grid_search_cv_with_kfold_data_split(2)
+    run_logistic_regression_with_kfold_data_split()
+    # run_logistic_regression_grid_search_cv()
+    run_random_forest_with_kfold_data_split()
+    # run_random_forest_grid_search_cv()
     # run_majority_vote_with_kfold_data_split()
-    # run_mlp_with_kfold_data_split()
-    run_mlp_grid_search_cv_with_kfold_data_split(4)
     log("Done.")
