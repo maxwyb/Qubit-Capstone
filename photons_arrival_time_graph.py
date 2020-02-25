@@ -28,9 +28,9 @@ def use_ramdisk(filenames):
     return list(map(lambda filename: "/Volumes/ramdisk/" + filename, filenames))
 
 
-def load_datasets():
+def load_datasets(filenames):
     qubits_measurements = []
-    for dataset_filename in BRIGHT_QUBITS_DATASETS + DARK_QUBITS_DATASETS:
+    for dataset_filename in filenames:
         with open(dataset_filename, 'r') as dataset_file:
             log("Loading {}".format(dataset_filename))
             csv_reader = csv.reader(dataset_file)
@@ -47,11 +47,16 @@ def draw_plot(qubits_measurements):
     ax.set_xlabel("Time")
     ax.set_ylabel("Number of Photons")
     ax.set_xticks(np.linspace(0, 0.006, 21))
-    plt.hist(qubits_measurements, bins=2000)
+    # plt.hist(qubits_measurements, bins=2000)
+    plt.hist(qubits_measurements, bins=1000)
     plt.show()
 
 
 if __name__ == '__main__':
-    qubits_measurements = load_datasets()
+    # qubits_measurements = load_datasets(BRIGHT_QUBITS_DATASETS + DARK_QUBITS_DATASETS)
+    qubits_measurements = load_datasets([
+        'Results/falsely-classified-instances-mlp-lg-rf/false_positive_instances.csv', 
+        'Results/falsely-classified-instances-mlp-lg-rf/false_negative_instances.csv'
+    ])
     draw_plot(qubits_measurements)
     log("Done.")

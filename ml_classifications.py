@@ -4,7 +4,7 @@ import csv
 import pickle
 from os import path, sys
 from sklearn.base import BaseEstimator, TransformerMixin, ClassifierMixin
-from sklearn.model_selection import train_test_split, GridSearchCV, KFold
+from sklearn.model_selection import train_test_split, GridSearchCV, KFold, cross_validate
 from sklearn.neural_network import MLPClassifier
 from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
 from sklearn.linear_model import LogisticRegression
@@ -327,6 +327,28 @@ def run_mlp_with_kfold_data_split():
     print("MLP with KFold Data Split: Average Accuracy = {accuracy}".format(accuracy=avg_accuracy))
 
 
+def run_mlp_with_cross_validation_average():
+    """
+    Run the best model gotten from "run_mlp" by cross validation method only.
+    Training on 80% of the dataset and testing on 20% of the dataset 5 times, and take average of the accuracy
+    (32 neurons per layer, 2 layers, photons cutoff at BEST_ARRIVAL_TIME_THRESHOLD)
+    This is the model presented on 01/30/2020 meeting.
+
+    """
+    qubits_measurements, qubits_truths = load_datasets()
+
+    mlp_pipeline = Pipeline([
+            ('hstgm', Histogramize(num_buckets=6, arrival_time_threshold=(0, BEST_ARRIVAL_TIME_THRESHOLD))),
+            ('clf', MLPClassifier(hidden_layer_sizes=(32, 32), activation='relu', solver='adam'))
+        ])
+
+    kf = KFold(n_splits=5, shuffle=True, random_state=RANDOM_SEED)
+    cv_indices = kf.split(qubits_measurements)
+    cv_scores = cross_validate(mlp_pipeline, qubits_measurements, qubits_truths, cv=cv_indices, scoring='accuracy', n_jobs=-1, verbose=2)
+    print("Scores of Cross Validation Method on MLPClassifier: ")
+    print(cv_scores)
+
+
 def run_mlp_grid_search_cv_with_kfold_data_split(num_layers=2):
     """
     In each fold of the 5-fold training/testing data split, grid search for the best params in MLPClassifier
@@ -495,11 +517,12 @@ def run_majority_vote_with_kfold_data_split():
 if __name__ == '__main__':
     # run_mlp_classifier_in_paper()
     # run_mlp_grid_search_cv()
-    run_mlp_with_kfold_data_split()
+    # run_mlp_with_kfold_data_split()
+    run_mlp_with_cross_validation_average()
     # run_mlp_grid_search_cv_with_kfold_data_split(2)
-    run_logistic_regression_with_kfold_data_split()
+    # run_logistic_regression_with_kfold_data_split()
     # run_logistic_regression_grid_search_cv()
-    run_random_forest_with_kfold_data_split()
+    # run_random_forest_with_kfold_data_split()
     # run_random_forest_grid_search_cv()
     # run_majority_vote_with_kfold_data_split()
     log("Done.")
