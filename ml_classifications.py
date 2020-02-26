@@ -4,7 +4,7 @@ import csv
 import pickle
 from os import path, sys
 from sklearn.base import BaseEstimator, TransformerMixin, ClassifierMixin
-from sklearn.model_selection import train_test_split, GridSearchCV, KFold, cross_validate
+from sklearn.model_selection import train_test_split, GridSearchCV, KFold, StratifiedKFold, cross_validate
 from sklearn.neural_network import MLPClassifier
 from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
 from sklearn.linear_model import LogisticRegression
@@ -335,6 +335,8 @@ def run_mlp_with_cross_validation_average():
     This is the model presented on 01/30/2020 meeting.
 
     """
+    log("Starting MLPClassifier testing with Cross Validation Method.")
+
     qubits_measurements, qubits_truths = load_datasets()
 
     mlp_pipeline = Pipeline([
@@ -342,11 +344,13 @@ def run_mlp_with_cross_validation_average():
             ('clf', MLPClassifier(hidden_layer_sizes=(32, 32), activation='relu', solver='adam'))
         ])
 
-    kf = KFold(n_splits=5, shuffle=True, random_state=RANDOM_SEED)
-    cv_indices = kf.split(qubits_measurements)
+    kf = StratifiedKFold(n_splits=5, shuffle=True, random_state=RANDOM_SEED)
+    cv_indices = kf.split(qubits_measurements, qubits_truths)
     cv_scores = cross_validate(mlp_pipeline, qubits_measurements, qubits_truths, cv=cv_indices, scoring='accuracy', n_jobs=-1, verbose=2)
     print("Scores of Cross Validation Method on MLPClassifier: ")
     print(cv_scores)
+    print("Average accuracy: {accuracy}".format(
+        sum(list(cv_scores['test_score']) / len(list(cv_scores['test_score']))))
 
 
 def run_mlp_grid_search_cv_with_kfold_data_split(num_layers=2):
