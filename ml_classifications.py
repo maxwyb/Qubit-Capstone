@@ -179,8 +179,6 @@ def classifier_test(classifier, qubits_measurements_train, qubits_measurements_t
 # MLP Classifier
 def mlp_grid_search_cv(qubits_measurements_train, qubits_truths_train, num_layers, **kwargs):
     cv = kwargs['cv'] if 'cv' in kwargs else 4
-    ## DEBUG
-    log(cv)
 
     log("Starting Grid Search with Cross Validation on MLP Classifier.")
     
@@ -194,7 +192,7 @@ def mlp_grid_search_cv(qubits_measurements_train, qubits_truths_train, num_layer
     mlp_param_grid = {
         # 'hstgm__num_buckets': range(1, 33),
         # 'hstgm__arrival_time_threshold': [(0, BEST_ARRIVAL_TIME_THRESHOLD), (0, POST_ARRIVAL_TIME_THRESHOLD)],
-        'clf__hidden_layer_sizes': [(n,) * num_layers for n in range(8, 9)]
+        'clf__hidden_layer_sizes': [(n,) * num_layers for n in range(8, 41)]
         # 'clf__learning_rate_init': [0.001, 0.0005],
         # 'clf__max_iter': [200, 500]
     }
@@ -332,61 +330,6 @@ def run_mlp_with_kfold_data_split():
     print("MLP with KFold Data Split: Average Accuracy = {accuracy}".format(accuracy=avg_accuracy))
 
 
-def run_mlp_with_cross_validation_average():
-    """
-    Run the best model gotten from "run_mlp" by cross validation method only.
-    Training on 80% of the dataset and testing on 20% of the dataset 5 times, and take average of the accuracy
-    (32 neurons per layer, 2 layers, photons cutoff at BEST_ARRIVAL_TIME_THRESHOLD)
-    This is the model presented on 01/30/2020 meeting.
-
-    """
-    log("Starting MLPClassifier testing with Cross Validation Method.")
-
-    qubits_measurements, qubits_truths = load_datasets()
-
-    mlp_pipeline = Pipeline([
-            ('hstgm', Histogramize(num_buckets=6, arrival_time_threshold=(0, POST_ARRIVAL_TIME_THRESHOLD))),
-            ('clf', MLPClassifier(hidden_layer_sizes=(32, 32), activation='relu', solver='adam'))
-        ])
-
-    kf = StratifiedKFold(n_splits=5, shuffle=True, random_state=RANDOM_SEED)
-    qubits_class = []
-    assert(len(qubits_measurements) == len(qubits_truths))
-    for index in range(len(qubits_measurements)):
-        qubits_class.append(qubits_truths[index] * 100 + len(qubits_measurements[index]))
-    cv_indices = kf.split(qubits_measurements, qubits_class)
-
-    cv_scores = cross_validate(mlp_pipeline, qubits_measurements, qubits_truths, cv=cv_indices, scoring='accuracy', n_jobs=-1, verbose=2)
-    print("Scores of Cross Validation Method on MLPClassifier: ")
-    print(cv_scores)
-    # print("Average accuracy: {accuracy}".format(
-    #     sum(list(cv_scores['test_score'])) / len(list(cv_scores['test_score']))))
-
-
-def run_mlp_grid_search_cv_with_cross_validation_average():
-    """
-    Run MLPClassifier with params Grid Search, 
-    using the Cross Validation Method without splitting training/testing set beforehand
-    """
-    log("Starting MLPClassifier Grid Search with Cross Validation Method.")
-
-    qubits_measurements, qubits_truths = load_datasets()
-
-    kf = StratifiedKFold(n_splits=5, shuffle=True, random_state=RANDOM_SEED)
-    qubits_class = []
-    assert(len(qubits_measurements) == len(qubits_truths))
-    for index in range(len(qubits_measurements)):
-        qubits_class.append(qubits_truths[index] * 100 + len(qubits_measurements[index]))
-    cv_indices = kf.split(qubits_measurements, qubits_class)
-
-    mlp_grid = picklize('mlp_grid_search_cv_cv_average') \
-        (mlp_grid_search_cv)(qubits_measurements, qubits_truths, 2, cv=cv_indices)  # TODO: style to pass in optional parameters
-    # mlp_grid = mlp_grid_search_cv(qubits_measurements, qubits_truths, 2, cv=cv_indices)
-    log(mlp_grid.cv_results_)
-    print("Best parameters found in Grid Search:")
-    print(mlp_grid.best_params_)
-
-
 def run_mlp_grid_search_cv_with_kfold_data_split(num_layers=2):
     """
     In each fold of the 5-fold training/testing data split, grid search for the best params in MLPClassifier
@@ -422,6 +365,62 @@ def run_mlp_grid_search_cv_with_kfold_data_split(num_layers=2):
     
     avg_accuracy = sum(clf_accuracies) / len(clf_accuracies)
     print("MLP with KFold Data Split: Average Accuracy = {accuracy}".format(accuracy=avg_accuracy))
+
+
+def run_mlp_with_cross_validation_average():
+    """
+    Run the best model gotten from "run_mlp" by cross validation method only.
+    Training on 80% of the dataset and testing on 20% of the dataset 5 times, and take average of the accuracy
+    """
+    log("Starting MLPClassifier testing with Cross Validation Method.")
+
+    qubits_measurements, qubits_truths = load_datasets()
+
+    mlp_pipeline = Pipeline([
+            ('hstgm', Histogramize(num_buckets=6, arrival_time_threshold=(0, POST_ARRIVAL_TIME_THRESHOLD))),
+            ('clf', MLPClassifier(hidden_layer_sizes=(33, 33), activation='relu', solver='adam'))
+        ])
+
+    kf = StratifiedKFold(n_splits=5, shuffle=True, random_state=RANDOM_SEED)
+    qubits_class = []
+    assert(len(qubits_measurements) == len(qubits_truths))
+    for index in range(len(qubits_measurements)):
+        qubits_class.append(qubits_truths[index] * 100 + len(qubits_measurements[index]))
+    cv_indices = kf.split(qubits_measurements, qubits_class)
+
+    cv_scores = cross_validate(mlp_pipeline, qubits_measurements, qubits_truths, cv=list(cv_indices), scoring='accuracy', n_jobs=-1, verbose=2)
+    print("Scores of Cross Validation Method on MLPClassifier: ")
+    print(cv_scores)
+    print("Average accuracy: {accuracy}".format(accuracy=
+        sum(list(cv_scores['test_score'])) / len(list(cv_scores['test_score']))))
+
+
+def run_mlp_grid_search_cv_with_cross_validation_average():
+    """
+    Run MLPClassifier with params Grid Search, 
+    using the Cross Validation Method without splitting training/testing set beforehand
+    """
+    log("Starting MLPClassifier Grid Search with Cross Validation Method.")
+
+    qubits_measurements, qubits_truths = load_datasets()
+
+    # construct iterator for training/testing dataset split
+    # evenly distribute qubits with a certain number of photons captured
+    kf = StratifiedKFold(n_splits=5, shuffle=True, random_state=RANDOM_SEED)
+    qubits_class = []
+    assert(len(qubits_measurements) == len(qubits_truths))
+    for index in range(len(qubits_measurements)):
+        qubits_class.append(qubits_truths[index] * 100 + len(qubits_measurements[index]))
+    cv_indices = kf.split(qubits_measurements, qubits_class)
+
+    mlp_grid = picklize('mlp_grid_search_cv_cv_average') \
+        (mlp_grid_search_cv)(qubits_measurements, qubits_truths, 2, cv=list(cv_indices))
+    log(mlp_grid.cv_results_)
+
+    best_accuracy = max(list(mlp_grid.cv_results_['mean_test_score']))
+    print("Best parameters found in Grid Search:")
+    print(mlp_grid.best_params_)
+    print("Best average accuracy: {accuracy}".format(accuracy=best_accuracy))
 
 
 def run_logistic_regression_with_kfold_data_split():
@@ -556,8 +555,8 @@ if __name__ == '__main__':
     # run_mlp_classifier_in_paper()
     # run_mlp_grid_search_cv()
     # run_mlp_with_kfold_data_split()
-    # run_mlp_with_cross_validation_average()
-    run_mlp_grid_search_cv_with_cross_validation_average()
+    run_mlp_with_cross_validation_average()
+    # run_mlp_grid_search_cv_with_cross_validation_average()
     # run_mlp_grid_search_cv_with_kfold_data_split(2)
     # run_logistic_regression_with_kfold_data_split()
     # run_logistic_regression_grid_search_cv()
