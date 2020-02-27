@@ -222,7 +222,7 @@ if __name__ == '__main__':
 
     # "Just-kidding" Split
     draw_photon_count_frequency_plot_split_by_truth(qubits_measurements, qubits_truths, 
-        list(KFold(n_splits=5, shuffle=False, random_state=1).split(qubits_measurements)))
+        list(KFold(n_splits=5, shuffle=False).split(qubits_measurements)))
 
     # Old Split
     # draw_photon_histogram_plot(qubits_measurements, qubits_truths, 

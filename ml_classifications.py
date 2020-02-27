@@ -551,11 +551,35 @@ def run_majority_vote_with_kfold_data_split():
     print("Majority Vote with KFold Data Split: Average Accuracy = {accuracy}".format(accuracy=avg_accuracy))
     
 
+def run_threshold_cutoff():
+    """
+    A toy data spliter is used primarily to show that a very high (99.975461%) but misleading accuracy
+    can be achieved with bad training/testing split
+    """
+    log("Starting Threshold Cutoff Classifier.")
+    
+    qubits_measurements, qubits_truths = tuple(map(lambda dataset: np.array(dataset), load_datasets()))
+    
+    # Data split
+    kf = KFold(n_splits=5, shuffle=False)
+    train_index, test_index = list(kf.split(qubits_measurements))[0]
+    qubits_measurements_train, qubits_measurements_test, qubits_truths_train, qubits_truths_test = \
+        qubits_measurements[train_index], qubits_measurements[test_index], qubits_truths[train_index], qubits_truths[test_index]
+
+    tc_pipeline = Pipeline([
+        ('hstgm', Histogramize(num_buckets=6, arrival_time_threshold=(0, POST_ARRIVAL_TIME_THRESHOLD))),
+        ('clf', ThresholdCutoffClassifier())
+    ])
+
+    tc_pipeline = classifier_train(tc_pipeline, qubits_measurements_train, qubits_truths_train)
+    classifier_test(tc_pipeline, qubits_measurements_train, qubits_measurements_test, qubits_truths_train, qubits_truths_test)
+
+
 if __name__ == '__main__':
     # run_mlp_classifier_in_paper()
     # run_mlp_grid_search_cv()
     # run_mlp_with_kfold_data_split()
-    run_mlp_with_cross_validation_average()
+    # run_mlp_with_cross_validation_average()
     # run_mlp_grid_search_cv_with_cross_validation_average()
     # run_mlp_grid_search_cv_with_kfold_data_split(2)
     # run_logistic_regression_with_kfold_data_split()
@@ -563,4 +587,5 @@ if __name__ == '__main__':
     # run_random_forest_with_kfold_data_split()
     # run_random_forest_grid_search_cv()
     # run_majority_vote_with_kfold_data_split()
+    run_threshold_cutoff()
     log("Done.")
