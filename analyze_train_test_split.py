@@ -80,6 +80,13 @@ def draw_photon_histogram_plot(qubits_measurements, qubits_truths, split_indicie
         _i = _i + 1
     
     # plt.tight_layout()
+    left  = 0.125  # the left side of the subplots of the figure
+    right = 0.9    # the right side of the subplots of the figure
+    bottom = 0.05   # the bottom of the subplots of the figure
+    top = 0.925      # the top of the subplots of the figure
+    wspace = 0.2   # the amount of width reserved for blank space between subplots
+    hspace = 0.6   # the amount of height reserved for white space between subplots
+    subplots_adjust(left=left, bottom=bottom, right=right, top=top, wspace=wspace, hspace=hspace)
     plt.show()
 
 
@@ -221,8 +228,8 @@ if __name__ == '__main__':
     qubits_measurements, qubits_truths = tuple(map(lambda dataset: np.array(dataset), load_datasets()))
 
     # "Just-kidding" Split
-    draw_photon_count_frequency_plot_split_by_truth(qubits_measurements, qubits_truths, 
-        list(KFold(n_splits=5, shuffle=False).split(qubits_measurements)))
+    # draw_photon_count_frequency_plot_split_by_truth(qubits_measurements, qubits_truths, 
+    #     list(KFold(n_splits=5, shuffle=False).split(qubits_measurements)))
 
     # Old Split
     # draw_photon_histogram_plot(qubits_measurements, qubits_truths, 
@@ -240,9 +247,11 @@ if __name__ == '__main__':
     assert(len(qubits_measurements) == len(qubits_truths))
     for index in range(len(qubits_measurements)):
         qubits_class.append(qubits_truths[index] * 100 + len(qubits_measurements[index]))
+    draw_photon_histogram_plot(qubits_measurements, qubits_truths,
+        list(kf.split(qubits_measurements, qubits_class)))
     # draw_photon_count_frequency_plot(qubits_measurements, qubits_truths, 
     #     list(kf.split(qubits_measurements, qubits_class)))
-    draw_photon_count_frequency_plot_split_by_truth(qubits_measurements, qubits_truths, 
-        list(kf.split(qubits_measurements, qubits_class))) 
+    # draw_photon_count_frequency_plot_split_by_truth(qubits_measurements, qubits_truths, 
+    #     list(kf.split(qubits_measurements, qubits_class))) 
 
     log("Done.")
