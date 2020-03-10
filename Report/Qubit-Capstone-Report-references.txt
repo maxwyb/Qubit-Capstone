@@ -1,0 +1,9 @@
+https://en.wikipedia.org/wiki/Multilayer_perceptron
+https://en.wikipedia.org/wiki/Artificial_neural_network
+https://en.wikipedia.org/wiki/Perceptron#Definitions
+
+https://deepai.org/machine-learning-glossary-and-terms/softmax-layer#:~:text=
+https://ml-cheatsheet.readthedocs.io/en/latest/loss_functions.html
+
+https://en.wikipedia.org/wiki/Logistic_regression#Logistic_regression_vs._other_approaches
+https://en.wikipedia.org/wiki/Random_forest#:~:text=
